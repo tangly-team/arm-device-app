@@ -1,0 +1,54 @@
+
+== Create a New Application
+
+You want to create a new embedded application on an ARM microcontroller.
+Below the steps you need to use our libraries:
+
+- Copy the _vinci_ folder containing the abstractions for the actor based approach.
+- Copy the _vici-cmsis_ folder containing the implementation of the above abstractions with cmsis-os v2 official layer.
+- Copy the _sal-cmsis_ if you are interested in components for your periphery.
+
+Optionally you can
+
+- Copy the _doctest_ folder for unit test support. The folder contains the official header of https://github.com/doctest/doctest[doctest].
+The _vinci-tests_ folder contains examples of unit tests grouped in suites.
+
+The _CMakeLists.txt_ file contains examples how to compile the project, execute the unit tests, and generate the doxygen documentation.
+
+== CMake
+
+The following commands process the cmake configuration.
+The script compiles the tests and the demonstration application.
+
+[code, bash]
+----
+mkdir cmake-build           <1>
+cd cmake-build              <2>
+cmake ..                    <3>
+make                        <4>
+./VinciTest                 <5>
+./Vinci                     <6>
+----
+
+<1> Create the build directory for the project
+<2> Change into the build directory
+<3> Generate all build local build files with cmake
+<4> Build all artifacts
+<5> Run the unit tests
+<6> Run the demonstration application
+
+
+== Generate Doxygen Documentation
+
+You created your build directory and called cmake to generate all scripts. The next commands generate the documentation.
+
+[source, bash]
+----
+cd cmake-build              <1>
+doxygen Doxyfiles.docs      <2>
+----
+
+<1> Change into the build directory.
+<2> Generate the documentation. The files are located under ./html directory.
+
+
