@@ -1,0 +1,597 @@
+ifndef::imagesdir[:imagesdir: ./images]
+
+:ref-actor-model: https://en.wikipedia.org/wiki/Actor_model[Actor Model]
+:ref-message-passing: https://en.wikipedia.org/wiki/Message_passing[Message Passing]
+:ref-raii: https://en.cppreference.com/w/cpp/language/raii[RAII]
+:ref-cmsis-rtos2: https://arm-software.github.io/CMSIS_5/RTOS2/html/index.html[CMSIS-RTOS v2]
+
+[[section-solution-strategy]]
+== Solution Strategy
+
+=== Actor Model
+
+image::actors-model.svg[width=420,height=360,role=left]
+
+Concurrent programming has always been tricky.
+Accessing a shared state from multiple threads is a central problem, where hard-to-catch errors may easily appear.
+
+The need for concurrent programming is increased tremendously with the fact that all modern processors and many microcontrollers have multiple cores.
+
+Java or {cpp} have all the instruments for safe and flawless concurrency, but the compiler would deliberately let developers write dangerous code.
+
+Java has native threading support since inception.
+Powerful synchronization primitives were added later with the addition of the concurrent package.
+The latest evolution is virtual threads enabling the creation of thousands of parallel tasks.
+
+C and {cpp} have threading support and synchronization primitives were added with the 2011 revision.
+Later versions added small refinement to the synchronization mechanisms.
+
+There is a strong need for higher-level frameworks ensuring safe concurrent programming cite:[pattern-oriented-software-architecture-vol-2].
+
+The {ref-actor-model} is one of the approaches to safe concurrency.
+The model is based on {ref-message-passing}.
+
+Although multiple actors can run at the same time, an actor will process a given message sequentially.
+This means that if you send three messages to the same actor, it will just execute one at a time.
+To have these three messages being executed concurrently, you need to create three actors and send one message each.
+
+Messages are sent asynchronously to an actor that needs to store them somewhere while it is processing another message.
+The mailbox is the place where these messages are stored.
+
+Another interesting aspect of the actor model is that it does not matter if the actor which I am sending a message to is running locally or on another node.
+
+An actor is a computational entity that, in response to a message it receives, can concurrently cite:[reactive-messaging-patterns-with-actor-model]:
+
+- Send a finite number of messages to other actors.
+- Create a finite number of new actors.
+- Designate the behavior to be used for the next message it receives.
+
+=== Advantages and Downsides
+
+Here are four benefits of this model:
+
+. It removes the need for lock-based synchronization.
+Actors change only their private state.
+Other actors’ states are off-limits to them. +
+There is no shared state in the actor model, so there is no possibility of that disaster when multiple threads try to modify the same data.
+. It was designed for distributed computing.
+Every actor has a mailbox that stores messages until they can be processed.
+It does not matter if the actor runs locally, on another core, or on another device.
+As long as it can receive messages, it makes no difference.
+. It allows for better scalability.
+If your actor-based solution sees an increase in traffic load
+footnote:[A higher traffic load has a direct impact on the number of unprocessed messages in actor mailboxes.], you can create more actors
+footnote:[The creation of additional actors is prohibited in security relevant applications.
+For example, the MISRA 2022 standard explicitly prohibits dynamic creation of processes.
+The only possible approach is to dimension your systems to fulfill your non-functional requirements.].
+Actors can also be programmed to create child actors under certain conditions. +
+This makes scaling an application a lot easier. +
+_If your application has constrained resources, you can monitor the number of unprocessed messages in the actor queue_.
+_If the average or maximum size of the queue exceeds expectations, your system is wrongly dimensioned_.
+_You must either reduce processing requirements or increase available processor and memory resources_.
+. It does not require the sender to block waiting for a return value.
+This is an overall benefit of using messaging instead of method calls.
+The receiver will send a return value in another message when it is done handling the original one.
+The sender can send out more messages in the meantime.
+
+[TIP]
+====
+Embedded applications using traditional approaches with synchronization primitives such as mutexes and semaphores are very difficult to implement correctly.
+
+The MISRA committee has recognized the problems and defined a set of restrictions in the MISRA C 2012 Amendment 4—or should we say MISRA C 2023 revision.
+The recommendations are:
+
+- No dynamic creation of threads.
+- No data races between threads are acceptable.
+Thus, threads must be protected by a synchronization mechanism.
+- All synchronization objects shall be created and instantiated during the initialization of the application.
+- No cyclic calling chains with threads shall exist to avoid deadlocks on synchronization primitives.
+
+_The actor model solves all the identified synchronization difficulties and fulfills the above restrictions_.
+====
+
+Actor-based concurrency comes with some drawbacks:
+
+. An actor processes messages one at a time.
+So, if several actors send five messages to the same receiving actor, it will execute them one after the other.
+If you need these messages executed simultaneously, you need five different actors running simultaneously.
+. Deadlock is still possible.
+Two actors may end up waiting for a message from each other, thus creating a deadlock.
+Overall, the model is considered susceptible to deadlocks. +
+However, it is worth noting that concurrent programming is more error-prone and complex than sequential programming.
+. You need to enforce message immutability.
+Using the actor model in languages that do not enforce immutability out of the box means it is up to the developer to ensure messages remain immutable. +
+If this verification is overlooked, messages may become mutable and lead to thread-safety concerns.
+. Unexpected failures can be critical.
+If an actor failure occurs, other actors may get perpetually stuck awaiting a message from it.
+To avoid this situation, developers have to employ defensive programming techniques and handle exceptions within the scope of each actor.
+
+=== Minimal Actor Library
+
+To send a message to an actor, you need a reference to the receiving entity.
+
+Introduce naming conventions for actors to profit from search capabilities and improved logging.
+An actor should have a unique external identifier to support identification and querying.
+
+Consider using a sealed class hierarchy to define messages actors receive
+footnote:[A similar approach can be implemented in {cpp} with _std::variant_ construct.].
+Pattern matching with _instanceof_ would provide exhaustive and type secure handling of all alternatives.
+
+Java provides the needed mechanisms.
+Modern pattern matching in Java provides elegant solutions.
+
+The behavior of an actor is specified as a flat or a hierarchical state machine.
+
+The _net.tangly.fsm_ library provides the abstractions to elegantly implement applications with Java:
+
+- A library providing actors and asynchronous message passing communication.
+- A timer manager to schedule time triggered tasks.
+This approach simplifies slightly the programming of actors.
+An actor only needs to wait on regular messages or timeout messages on its mailbox.
+- Hierarchical state machines as described in the UML standard.
+- A flow library to publish and subscribe data and realize transformation pipelines.
+
+A similar _net::tangly::vinci_ library provides similar abstractions to elegantly implement applications with {cpp}:
+
+- A library providing actors and asynchronous message passing communication.
+- A timer manager to schedule time triggered tasks.
+- _Embedded applications often have more simple flat finite state machines._
+_Such machines should be implemented programmatically with switch statements._ +
+_Additionally, the Boost library provides statechart libraries._
+- A message pool feature to programmatically acquire and release message instances.
+The pool is useful when exchanging messages between actors.
+Otherwise, either the object will be deleted when leaving the scope in one actor, or you have to dynamically allocate on the heap.
+Both approaches are suboptimal for realtime embedded applications.
+
+[TIP]
+====
+Data processing pipelines should be implemented with flow approaches and not with actors.
+
+Multiple publishers and multiple consumers for a data channel should be provided.
+====
+
+=== {cpp} Actors
+
+image::actors-model.svg[width=420,height=360,role=left]
+
+There is a strong need for higher-level frameworks ensuring safe concurrent programming.
+
+The {ref-actor-model} is one of the best approaches to safe concurrency and legible code cite:[reactive-messaging-patterns-with-actor-model].
+The model is based on {ref-message-passing}.
+
+Although multiple actors can run at the same time, an actor will process a given message sequentially.
+This means that if you send three messages to the same actor, it will just execute one at a time.
+
+Messages are sent asynchronously to an actor that needs to store them somewhere while it is processing another message.
+The message queue is the place where these messages are stored.
+The ordering is normally a FIFO _First In, First Out_ order.
+
+Another interesting aspect of the actor model is that it does not matter if the actor that I am sending a message to is running locally or in another node.
+
+An actor is a computational entity that, in response to a message it receives, can concurrently:
+
+- Send a finite number of messages to other actors.
+- Create a finite number of new actors.
+- Designate the behavior to be used for the next message it receives.
+
+=== Actor Abstractions
+
+[plantuml,actors,svg]
+....
+@startuml
+class Message<T> {
+  int kind();
+  T data();
+}
+
+abstract class ConcurrentQueue<T>
+abstract class Actor<T>
+
+Actor "1"*-"1" ConcurrentQueue : queue
+ConcurrentQueue "1"*-"n" Message : messages
+
+
+@enduml
+....
+
+[IMPORTANT]
+====
+An actor has exactly one message queue representing its mailbox.
+It is the sole owner of the message queue and will process all messages stored in the queue.
+
+No other actor has access to the private message queue of a specific message queue.
+The actor is the sole owner of all messages stored in its mailbox.
+
+_The action of sending a message from one actor to another implies the transfer of ownership for this message_.
+_We strongly suggest implementing messages as immutable value objects_.
+====
+
+The message abstraction structure is
+
+[source,cpp]
+----
+    template<typename T>
+    class Message {
+    public:
+        Message(int kind, T data) : _kind{kind}, _data(data) {}
+
+        inline int kind() const noexcept { return _kind; };                    <1>
+
+        inline void kind(int kind) { _kind = kind; }
+
+        inline T data() const noexcept { return _data; }                       <2>
+
+        inline void data(T data) { _data = data; }
+    private:
+        int _kind;
+        T _data;
+    };
+----
+
+<1> The field can be used to identify the type of the payload.
+If you use variants, either put the variant index or define constants for the various payload types.
+The kind field is when more a legacy field because variants provide build-in check mechanisms.
+<2> The payload of the message.
+
+Each application will define the payload for the messages sent between actors.
+We recommend defining an overall message type for all messages defined in the application.
+
+[source,cpp]
+----
+struct PayloadOne {};                                                          <1>
+struct PayloadTwo {};
+
+
+struct Data;                                                                   <2>
+
+typedef std::variant<PayLoadOne, PayLoaTwo, Timer<Data>,
+                        TimerCmd<Data>> Variants;                              <3>
+
+struct Data {                                                                  <4>
+    Variants data;
+};
+
+Message<Data> build(PayLoadOne data) {                                         <5>
+    Data dataVariant{data};
+    return {(int) (dataVariant.data.index()), {data}};
+}
+
+Message<Data>* build(PayLoadOne& data) {                                       <6>
+    Data dataVariant{data};
+    Message<Data>* msg = msgPool.acquire();
+    msg->_kind = dataVariant.data.index();
+    msg->_data = dataVariant;
+    return msg;
+}
+----
+
+<1> Define the various payloads for the different types of messages exchanged in the application.
+<2> Forward declaration for declaration with template referencing the message class.
+<3> Define a type verified union of all payload types.
+<4> Define the structure we declared before as forward declaration.
+<5> Optional build function to simplify the creation of message objects.
+<6> Optional build function if you are using a message pool.
+
+[WARNING]
+====
+The above approach works without trouble if all fields are https://en.cppreference.com/w/cpp/named_req/Destructible[destructible].
+
+The more delicate problem is dependent on how the underlying realtime implementation to transfer messages is realized.
+If the layer uses the {cpp} standard library constructs, you are safe.
+You are also safe if all the fields on your payloads are trivially destructible.
+
+If the layer uses a C approach with raw byte copying of messages, you must care about {ref-raii} and destructor calls when the message object leaves its {cpp} scope.
+In this case, you must use a message allocator with explicit acquire and release operations to circumvent automatic object destruction.
+
+A reference implementation is provided with the _vinci_ library.
+====
+
+The processing logic for an actor has the following form.
+The actions and guards should only have one parameter to pass the message being processed.
+
+[source,cpp]
+----
+bool MyActor::processMessage(Message<Data>* msg) {
+    bool continues = true;
+    Variants variants = msg.data().data;
+    if (const MyActorData *data = std::get_if<MyActorData>(variants)) {
+        processMsgInFsm(*data);
+    }
+}
+----
+
+[CAUTION]
+====
+If the message was acquired from the message pool, release the message back to the pool before leaving the method.
+====
+
+=== Finite State Machines
+
+Embedded applications often have relative simple flat state machine describing their behavior.
+Implement flat state machines as a double nested switch statement.
+The first statement selects the actor current state, the second statement selects the type of message to be processed.
+A guard is implemented as a conditional statement.
+
+[source,cpp]
+----
+State state = INIT;                                        <1>
+
+void processMsgInFsm(MyActorData& event) {
+    switch (state) {
+        case STATE_1:
+            switch (event->id) {                           <2>
+                case (ID_A):
+                    if (guard_1(event)) {                  <3>
+                        action_a_1(event);                 <4>
+                        state = STATE_2;
+                    } else if (guard_2(event)) {
+                        action_a_2(event)) {
+                        state = STATE_3;
+                    }
+                    break;
+                case (ID_B):
+                    action_b(event);
+                    state = STATE_N;
+                    break;
+                ...
+            }
+        ...
+    }
+}
+----
+
+<1> Current state of the actor.
+The type of the variable should be an enumeration.
+<2> Identify the message through is identifier.
+A message should be a value object.
+<3> Evaluate an optional guard condition to decide if the transition will be selected.
+<4> Implement the transition from state _STATE_1_ to _STATE_2_ and execute the associated action _action_a_.
+It is customary to pass the message as parameter to the function.
+
+The state machine can be documented with a table describing for each state, the event be processed, an optional guard, the target state and the action.
+
+This design approach improves the maintainability of the application cite:[modern-software-engineering,continuous-delivery,continuous-delivery-pipelines].
+
+=== Message Handling
+
+Message objects should not be allocated on the heap.
+
+If your RTOS is C based, avoid using classes allocating memory from the heap.
+Beware that {cpp} standard library strings use the heap.
+You have also to be cautious of the scoping of your message declaration to avoid destruction of the objects when leaving the declaration scope.
+
+The library provides a static message pool to avoid heap usage and {ref-raii} problems when leaving a declaration scope.
+The tracking of the maximum number for simultaneously used messages in development mode is an additional advantage.
+
+[source,cpp]
+----
+    template<typename T>
+    class MsgPoolLogic {
+    public:
+        /**
+         * Acquire a message from the pool.
+         * @return pointer to the acquired message
+         */
+        Message<T>* acquire();
+
+        /**
+         * Release the message and return it to the pool.
+         * @param msg pointer to the message to release
+         */
+        void release(Message<T>* msg);
+
+        /**
+         * Return the number of free messages in the pool.
+         * @return number of free messages
+         */
+        int nrOfFreeMsgs();
+    };
+----
+
+=== Lessons Learnt
+
+The concepts implemented in the library are available for C and {cpp} based embedded applications.
+The presented version is the object-oriented {cpp} based variant.
+
+We use char arrays and _std::array_ instead of _std::string_ and _vector_ to eliminate dynamic memory allocation in the library.
+This approach has advantages for memory-constrained microcontrollers.
+
+[TIP]
+====
+The simplest approach to implement an actor-based embedded realtime system is:
+
+- Use the above-described abstractions.
+- Define all the actors of your system as static variables.
+Therefore, no actors are dynamically allocated on the heap.
+Give all actors the same priority.
+The behavior of the system should not be dependent on the priority.
+The priority has only an influence on how fast a message will be processed but how it will be processed.
+- Define the message payload as a _std:variant_
+- Use the message pool to acquire and release message instances.
+Therefore, no allocation of messages on the heap is performed.
+- Interrupt routines can process the data and send a message to an actor with _static void send(Actor<T>& actor, Message<T>* msg)_ call-
+
+The implementation of the library uses solely primitive types and avoids heap usage.
+====
+
+Overall, we do not see any reason not to use the {cpp} language for realtime embedded applications.
+We acknowledge the language has an initial steep learning curve.
+The advantage is more static checks from the compiler and better libraries.
+
+=== {cpp} Actors with cmsis
+
+image::actors-model.svg[width=420,height=360,role=left]
+
+The actor library defines the actor abstraction with mailboxes and concrete implementation for various target platforms.
+
+The {ref-cmsis-rtos2} platform provides an actor implementation for all realtime kernels supporting the CMSIS API.
+The API is under the stewardship of ARM company.
+
+STM provides this integration with freeRTOS for all STM32 microcontrollers.
+
+=== Library
+
+The library defines key abstractions as abstract classes.
+
+The implementation for a target platform defines the concrete classes for all abstract entities below.
+
+[plantuml,actors-stm,svg]
+....
+@startuml
+class Message<T> {
+  int kind();
+  T data();
+}
+
+abstract class ConcurrentQueue<T>
+
+abstract class Actor<T> {
+    {abstract} bool processMessage(Message<T>* msg);
+    {abstract} Message<T>* message();
+    {abstract} Message<T>* message(const uint32_t ticks);
+    {abstract} void delay(const uint32_t ticks);
+}
+
+abstract class MessagePool<T> {}
+
+abstract class TimerMgr<T> {
+}
+
+MessagePool *-- Message
+Actor "1"*-"1" ConcurrentQueue : queue
+ConcurrentQueue "1"*--"n" Message : messages
+TimerMgr *-"1" MessagePool : pool
+
+class ConcurrentQueueCmsis<T> {}
+
+class MessagePoolCmsis<T> {}
+
+class ActorCmsis<T> {}
+
+class TimerMgrCmsis<T> {}
+
+ConcurrentQueue <|-- ConcurrentQueueCmsis
+
+Actor <|-- ActorCmsis
+
+MessagePool <|-- MessagePoolCmsis
+
+TimerMgr <|-- TimerMgrSal
+ActorCmsis <|-- TimerMgrSal
+
+@enduml
+....
+
+=== Recipes
+
+==== Define Message Structure
+
+We advocate the following message structure:
+
+[source,cpp]
+----
+struct Data;                                                                   <1>
+
+struct ActorData {                                                             <2>
+    int msgId;
+};
+
+typedef std::variant<ActorData, TimerCmd<Data>, Timer<Data>> Variants;         <3>
+
+struct Data {                                                                  <4>
+    Variants variants;
+
+    TimerCmd<Data>* timerCmd() {                                               <5>
+        return std::get_if<TimerCmd<Data>>(&variants);
+    }
+
+    Timer<Data>* timer() {
+        return std::get_if<Timer<Data>>(&variants);
+    };
+
+    ActorData* data() {
+        return std::get_if<ActorData>(&variants);
+    };
+};
+
+typedef Message<Data> MyMessage;                                               <6>
+----
+
+<1> Forward declaration of the structure containing all message variants.
+<2> Define the payload for the actors of your application.
+You can define one or multiple payload structures.
+<3> Create the variant with all payloads to prove a type checked union abstraction.
+<4> Define the forward struct declaration.
+This approach is necessary to satisfy the {cpp} compiler.
+<5> Optionally, you can provide helper methods to access a specific payload type with runtime checks enabled.
+<6> Optionally, you can define a type declaration for your messages with the defined payload.
+
+==== Define Your Actors
+
+[source,cpp]
+----
+MyActorCmsis::MyActorCmsis(const char* name, int queueSize,
+                            MessagePool<Data>& pool)
+    : ActorCmsis<Data>(name, queueSize, threadAttributes), _pool{pool}  {
+private:
+    MessagePool<Data>& _pool;
+}
+
+bool MyActorCmsis::processMsg(Message<Data>* msg) {                            <1>
+    bool continues = true;
+    Variants variants = msg->data().data;
+    if (const ActorData* data = std::get_if<ActorData>(&variants)) {           <2>
+        switch (data->cmd) {                                                   <3>
+            case ActorData::ACTOR_COMMUNICATION:
+                std::cout << "received message " << data->msgId
+                            << " from " << data->sender->name() << " to "
+                            << data->receiver->name()
+                            << "[[" << payload << "]]" << std::endl;
+                continues = (data->msgId < 20);
+                Actor<Data>::send(*data->sender,
+                        build({ActorData::ACTOR_COMMUNICATION,
+                        data->msgId + 1, payload, data->receiver, data->sender}));
+                break;
+            ...
+        }
+    } else if (const Timer<Data>* timer = std::get_if<Timer<Data>>(&variants)) {
+        std::cout << timer->client()->name() << " " << timer->id() << std::endl;
+    }
+    _pool.release(msg);                                                        <4>
+    return continues;
+};
+----
+
+<1> The body of your actor class responsible to process received messages.
+<2> Retrieve the payload variant you are interested in and check if it is available.
+<3> Process the message payload
+<4> Release the message back to the pool.
+
+[TIP]
+====
+The actor can still publish a programmatic interface to its users.
+
+The services are provided as regular public methods.
+The constraint is that they should not have a return value.
+
+Each service method is implemented as the creation of a command message and send to the actor mailbox.
+The command message creation only uses local variables and therefore does not need to be protected with synchronization primitives.
+
+The implementation of the actor is slightly more expensive.
+The users can use the actor as a regular class and do not have to bother with filling messages and sending them.
+====
+
+=== Lessons Learnt
+
+The message pool hugely simplifies the handling of messages between actors without having to juggle with scopes.
+The message pool uses constructs compatible with interrupt routines.
+Therefore, you can acquire and release messages from a regular actor instance or from an interrupt routine.
+
+The variant abstraction from the standard library provides runtime checks that the correct variant is access.
+
+Your actor class only needs to override the _processMsg(Message<Data>* msg)_ method.
+The body of this method should process all expected message types.
+Do not forget to release each message you retrieved from the message queue with the _message()_ function.
+
+If you have a complex logic, consider implementing a flat finite state machine as a double nested switch in the method.
+
