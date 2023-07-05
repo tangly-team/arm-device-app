@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iostream>
 #include <chrono>
+#include <cassert>
 #include "../../vinci-cpp/inc/ConcurrentQueueCpp.h"
 
 #include "Hardware.h"
@@ -191,10 +192,27 @@ uint32_t osMessageQueueGetMsgSize(osMessageQueueId_t mq_id) {
     return mq_id.get()->msgSize();
 }
 
+/**
+ * The blocking function osMessageQueuePut puts the message pointed to by msg_ptr into the the message queue specified by parameter mq_id.
+ * The parameter msg_prio is used to sort message according their priority (higher numbers indicate a higher priority) on insertion.
+ * @param mq_id message queue ID obtained by osMessageQueueNew.
+ * @param msg_ptr pointer to buffer with message to put into a queue.
+ * @param msg_prio message priority.
+ * @param timeout he parameter timeout can have the following values:
+ *      - when timeout is 0, the function returns instantly (i.e. try semantics).
+ *      - when timeout is set to osWaitForever the function will wait for an infinite time until the message is delivered (i.e. wait semantics).
+ *      - all other values specify a time in kernel ticks for a timeout (i.e. timed-wait semantics).
+ * @return Possible osStatus_t return values:
+ *      - osOK: the message has been put into the queue.
+ *      - osErrorTimeout: the message could not be put into the queue in the given time (wait-timed semantics).
+ *      - osErrorResource: not enough space in the queue (try semantics).
+ *      - osErrorParameter: parameter mq_id is NULL or invalid, non-zero timeout specified in an ISR.@
+ */
 osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id,
                              const void* msg_ptr,
                              uint8_t msg_prio,
                              uint32_t timeout) {
+    assert(timeout == osWaitForever);
     uint8_t* data = new uint8_t[message_size];
     memcpy(data, msg_ptr, message_size);
     mq_id.get()->push(data);
@@ -208,14 +226,14 @@ osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id,
  * @param msg_ptr pointer to buffer for message to get from a queue.
  * @param msg_prio pointer to buffer for message priority or NULL.
  * @param timeout The parameter timeout can have the following values:
-        - when timeout is 0, the function returns instantly (i.e. try semantics).
-        - when timeout is set to osWaitForever the function will wait for an infinite time until the message is retrieved (i.e. wait semantics).
-        - all other values specify a time in kernel ticks for a timeout (i.e. timed-wait semantics).
+ *      - when timeout is 0, the function returns instantly (i.e. try semantics).
+ *      - when timeout is set to osWaitForever the function will wait for an infinite time until the message is retrieved (i.e. wait semantics).
+ *      - all other values specify a time in kernel ticks for a timeout (i.e. timed-wait semantics).
  * @return Possible osStatus_t return values:
-        - osOK: the message has been retrieved from the queue.
-        - osErrorTimeout: the message could not be retrieved from the queue in the given time (timed-wait semantics).
-        - osErrorResource: nothing to get from the queue (try semantics).
-        - osErrorParameter: parameter mq_id is NULL or invalid, non-zero timeout specified in an ISR.
+ *      - osOK: the message has been retrieved from the queue.
+ *      - osErrorTimeout: the message could not be retrieved from the queue in the given time (timed-wait semantics).
+ *      - osErrorResource: nothing to get from the queue (try semantics).
+ *      - osErrorParameter: parameter mq_id is NULL or invalid, non-zero timeout specified in an ISR.
  */
 osStatus_t osMessageQueueGet(osMessageQueueId_t mq_id,
                              void* msg_ptr,
