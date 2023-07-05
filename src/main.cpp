@@ -1,163 +1,98 @@
 #include <iostream>
-
-#include "vinci-cpp/inc/ActorCpp.h"
-#include "vinci-cpp/inc/MsgPoolCpp.h"
+#include <chrono>
+#include <thread>
 
 #include "vinci-cmsis/inc/ActorCmsis.h"
 #include "vinci-cmsis/inc/MsgPoolCmsis.h"
 #include "vinci/inc/TimerMgr.h"
+#include "sal-cmsis/inc/Messages.h"
+#include "sal-cmsis/inc/Led.h"
+#include "sal-cmsis/inc/PressureSensor.h"
+#include "vinci-cmsis-simulation/inc/Simulator.h"
+
 
 using namespace vinci;
+using namespace sal;
 
-struct Data;
-
-struct ActorData {
-    static const int ACTOR_COMMUNICATION = 1;
-    static const int ACTOR_CONFIGURATION = 2;
-    int cmd;
-    int msgId;
-    char* payload;
-    Actor<Data>* sender;
-    Actor<Data>* receiver;
-};
-
-typedef std::variant<ActorData, TimerCmd<Data>, Timer<Data>> Variants;
-
-struct Data {
-    Variants data;
-};
-
-typedef Message<Data> MyMessage;
-
-MsgPoolCpp<Data> msgPoolCpp;
-MsgPoolCmsis<Data> msgPoolCmsis;
-
-class MyActorLogic {
-public:
-    MyActorLogic(MessagePool<Data>& pool) : _pool{pool} {}
-
-    bool processMessage(Actor<Data>* actor, Message<Data>* msg);
-
-    Message<Data>* build(ActorData data);
-
-private:
-    MessagePool<Data>& _pool;
-    char payload[64] = "this is a payload";
-};
-
-Message<Data>* MyActorLogic::build(ActorData data) {
-    Data dataVariant{data};
-    Message<Data>* msg = _pool.acquire();
-    msg->kind(dataVariant.data.index());
-    msg->data(dataVariant);
-    return msg;
-}
-
-bool MyActorLogic::processMessage(Actor<Data>* actor, Message<Data>* msg) {
-    bool continues = true;
-    Variants variants = msg->data().data;
-    if (const ActorData* data = std::get_if<ActorData>(&variants)) {
-        switch (data->cmd) {
-            case ActorData::ACTOR_COMMUNICATION:
-                std::cout << "received message " << data->msgId << " from " << data->sender->name() << " to " << data->receiver->name()
-                          << "[[" << payload << "]]" << "{" << msg << ":" << msgPoolCpp.nrOfFreeMsgs() << "}" << std::endl;
-                continues = (data->msgId < 20);
-                Actor<Data>::send(*data->sender, build({ActorData::ACTOR_COMMUNICATION, data->msgId + 1, payload, data->receiver, data->sender}));
-                break;
-            case ActorData::ACTOR_CONFIGURATION:
-                strcpy(payload, data->payload);
-                Actor<Data>::send(*data->receiver, build({ActorData::ACTOR_CONFIGURATION, data->msgId + 1, payload, data->sender, data->receiver}));
-                continues = (actor != data->sender);
-                break;
-        }
-    } else if (const Timer<Data>* timer = std::get_if<Timer<Data>>(&variants)) {
-        std::cout << timer->client()->name() << " " << timer->id() << std::endl;
-    }
-    _pool.release(msg);
-    return continues;
-}
-
-class MyActorCpp : public ActorCpp<Data> {
-public:
-    MyActorCpp(const char* name, MsgPoolCpp<Data>& pool);
-
-protected:
-    bool processMsg(Message<Data>* msg);
-
-private:
-    MyActorLogic logic;
-};
-
-MyActorCpp::MyActorCpp(const char* name, MsgPoolCpp<Data>& pool) : ActorCpp<Data>(name, pool), logic(pool) {}
-
-bool MyActorCpp::processMsg(Message<Data>* msg) {
-    return logic.processMessage(this, msg);
-};
-
-class MyActorCmsis : public ActorCmsis<Data> {
-public:
-    MyActorCmsis(const char* name, int queueSize, MsgPoolCmsis<Data>& pool);
-
-protected:
-    bool processMsg(Message<Data>* msg);
-
-private:
-    MyActorLogic logic;
-};
-
-osThreadAttr_t threadAttributes;
-
-MyActorCmsis::MyActorCmsis(const char* name, int queueSize, MsgPoolCmsis<Data>& pool) : ActorCmsis<Data>(name, queueSize, threadAttributes, pool), logic(pool) {}
-
-bool MyActorCmsis::processMsg(Message<Data>* msg) {
-    return logic.processMessage(this, msg);
-};
-
-Message<Data>* build(ActorData data, MessagePool<Data>& pool) {
-    Data dataVariant{data};
-    Message<Data>* msg = pool.acquire();
-    msg->kind(dataVariant.data.index());
-    msg->data(dataVariant);
-    return msg;
-}
+MsgPoolCmsis<Data> pool;
 
 /**
- * Actor One writes message to output and send a message to actor two.
- * Actor Two writes message to output and send a message to actor one.
- * Actor Three reads from input and send a message to Actor Two to change the message content.
+ * The processor one regulates two leds based on the input of a pressure sensor
+ * - If the pressure sensor is between 0 and  50, Led Green is stopped and Led Red blinks every 1000 ticks
+ * - If the pressure sensor is between 50 and 100, Led Green blinks every 1000 ticks and Red Led is stopped
+ * - If the pressure sensor is above 100, Led Green blinks every 4000 ticks and Read Lead blinks every 2000 ticks
+ */
+class ProcessorOne : public ActorCmsis<Data> {
+public:
+    ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, Led<Data>& ledGreen, Led<Data>& ledRed,
+                 PressureSensor<Data>& pressureSensorOne);
+
+protected:
+    bool processMsg(Message<Data>* msg);
+
+private:
+    Led<Data>& _ledGreen;
+    Led<Data>& _ledRed;
+    PressureSensor<Data>& _pressureSensorOne;
+};
+
+ProcessorOne::ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, Led<Data>& ledGreen, Led<Data>& ledRed,
+                           PressureSensor<Data>& pressureSensorOne)
+        : ActorCmsis<Data>(name, queueSize, threadAttributes, pool), _ledGreen{ledGreen}, _ledRed{ledRed}, _pressureSensorOne{pressureSensorOne} {
+    pressureSensorOne.registerListener(this);
+}
+
+
+bool ProcessorOne::processMsg(Message<Data>* msg) {
+    bool continues = true;
+    Variants variants = msg->data().variants;
+    PressureSensorData* data = msg->data().pressureSensorData();
+    if (data != nullptr) {
+        if ((data->pressure >= 0) && data->pressure < 50) {
+            _ledGreen.stop();
+            _ledRed.start(1000);
+        } else if ((data->pressure >= 50) && data->pressure < 100) {
+            _ledGreen.start(1000);
+            _ledRed.stop();
+        } else {
+            _ledGreen.start(4000);
+            _ledRed.start(2000);
+        }
+    }
+    pool().release(msg);
+    return continues;
+};
+
+/**
+ * The configuration is two LED (read, green), a pressure sensor, and a processor with a simple algorithm.
+ * The state of the hardware is displayed and user input is awaited.
  */
 int main(int argc, char** argv) {
     osKernelInitialize();
     osKernelStart();
+    osThreadAttr_t attributes;
 
-    MyActorCpp actor1("actor1", msgPoolCpp);
-    MyActorCpp actor2("actor2", msgPoolCpp);
-    MyActorCpp actor3("actor3", msgPoolCpp);
-    char payload[64] = "this is a main payload";
+    PressureSensor<Data> pressureSensorOne("pressureOne", 10, attributes, pool);
 
-    cout << "Message Pool C++   " << msgPoolCpp.nrOfFreeMsgs() << endl;
-    cout << "Message Pool cmsis " << msgPoolCmsis.nrOfFreeMsgs() << endl;
+    //This is equivalent to configure an ISR routine to send message to an actor if an interrupt is received.
+    Simulator<Data> simulator{pool, pressureSensorOne};
 
-    MyActorCpp::send(actor2, build({ActorData::ACTOR_COMMUNICATION, 0, payload, &actor1, &actor2}, msgPoolCpp));
-    strcpy(payload, "this is a new payload");
-    MyActorCpp::send(actor3, build({ActorData::ACTOR_CONFIGURATION, 0, payload, &actor3, &actor2}, msgPoolCpp));
-    actor1.join();
-    actor2.join();
-    actor3.join();
+    // Declares output components no requiring ISR routines
+    Led<Data> ledGreen(LED_GREEN, 10, attributes, pool);
+    Led<Data> ledRed(LED_RED, 10, attributes, pool);
 
-    MyActorCmsis actorCmsis1("actorCmsis1", 10, msgPoolCmsis);
-    MyActorCmsis actorCmsis2("actorCmsis2", 10, msgPoolCmsis);
-    MyActorCmsis actorCmsis3("actor3", 10, msgPoolCmsis);
-    strcpy(payload, "this is a main payload");
-    MyActorCmsis::send(actorCmsis2, build({ActorData::ACTOR_COMMUNICATION, 0, payload, &actorCmsis1, &actorCmsis2}, msgPoolCmsis));
-    strcpy(payload, "this is a new payload");
-    MyActorCmsis::send(actorCmsis3, build({ActorData::ACTOR_CONFIGURATION, 0, payload, &actorCmsis3, &actorCmsis2}, msgPoolCmsis));
-    actorCmsis1.join();
-    actorCmsis2.join();
-    actorCmsis3.join();
+    // Connects higher order processes to inputs and outputs
+    ProcessorOne processorOne("processorOne", 10, attributes, pool, ledGreen, ledRed, pressureSensorOne);
 
-    cout << "Message Pool C++   " << msgPoolCpp.nrOfFreeMsgs() << endl;
-    cout << "Message Pool cmsis " << msgPoolCmsis.nrOfFreeMsgs() << endl;
+    // Initial setup of the components
+    ledGreen.start(100);
+    ledRed.start(400);
+
+    // Run the system with a primitive hardware simulator for two LEDs and one pressure sensor
+    for (;;) {
+        simulator.display();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
 
     return 0;
 }

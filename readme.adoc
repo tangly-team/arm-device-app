@@ -40,7 +40,8 @@ make                        <4>
 
 == Generate Doxygen Documentation
 
-You created your build directory and called cmake to generate all scripts. The next commands generate the documentation.
+You created your build directory and called cmake to generate all scripts. The next commands generate the documentation
+footnote:[A message is printed if cmake cannot find your local doxygen installation.].
 
 [source, bash]
 ----

@@ -37,7 +37,7 @@ add_executable(Vinci
         src/vinci-cmsis/inc/ActorCmsis.h src/vinci-cmsis/inc/ConcurrentQueueCmsis.h src/vinci-cmsis/inc/MsgPoolCmsis.h
         src/sal-cmsis/inc/Messages.h src/sal-cmsis/inc/TimerMgrSal.h
         src/sal-cmsis/inc/ValveOnOff.h src/sal-cmsis/inc/PressureSensor.h src/sal-cmsis/inc/Led.h
-        src/vinci-cmsis-simulation/inc/cmsis_os2.h
+        src/vinci-cmsis-simulation/inc/cmsis_os2.h src/vinci-cmsis-simulation/inc/Simulator.h
         )
 
 add_executable(VinciTest

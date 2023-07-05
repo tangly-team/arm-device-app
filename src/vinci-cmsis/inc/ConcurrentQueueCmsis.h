@@ -54,7 +54,7 @@ namespace vinci {
         char data[sizeof(T)];
         uint8_t priority;
         osStatus_t status = osMessageQueueGet(_cmsisQueue, &data, &priority, ticks);
-        return (status == osErrorTimeout) ? std::nullopt : std::optional<T>{*(reinterpret_cast<T*>(data))};
+        return (status == osOK) ? std::optional<T>{*(reinterpret_cast<T*>(data))} : std::nullopt;
     }
 
     template<typename T>

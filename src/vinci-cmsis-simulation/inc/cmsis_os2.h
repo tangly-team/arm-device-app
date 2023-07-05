@@ -8,19 +8,22 @@
 #include <chrono>
 #include "../../vinci-cpp/inc/ConcurrentQueueCpp.h"
 
-// must be pointers because NULL can be returned
+#include "Hardware.h"
 
-typedef std::shared_ptr<vinci::ConcurrentQueueCpp<uint8_t *>> osMessageQueueId_t;
+// The below typedefs are pointers because NULL can be returned.
+
+typedef std::shared_ptr<vinci::ConcurrentQueueCpp<uint8_t*>> osMessageQueueId_t;
 typedef std::shared_ptr<std::thread> osThreadId_t;
 typedef std::shared_ptr<std::mutex> osMutexId_t;
-typedef void(*osThreadFunc_t)(void *argument);
+
+typedef void(* osThreadFunc_t)(void* argument);
 
 #define osWaitForever   0xFFFFFFFFU
 
 struct osMessageQueueAttr_t {
-    const char *name;
+    const char* name;
     uint32_t attr_bits;
-    void *cb_mem;
+    void* cb_mem;
     uint32_t cb_size;
 };
 
@@ -106,9 +109,9 @@ static const int THREAD_NAME_SIZE = 32;
 struct osThreadAttr_t {
     char name[THREAD_NAME_SIZE];
     uint32_t attr_bits;
-    void *cb_mem;
+    void* cb_mem;
     uint32_t cb_size;
-    void *stack_mem;
+    void* stack_mem;
     uint32_t stack_size;
     osPriority_t priority;
     TZ_ModuleId_t tz_module;
@@ -116,11 +119,11 @@ struct osThreadAttr_t {
 };
 
 struct osMutexAttr_t {
-    const char *name;
+    const char* name;
     uint32_t attr_bits;
-    void *cb_mem;
+    void* cb_mem;
     uint32_t cb_size;
-    void *stack_mem;
+    void* stack_mem;
 };
 
 struct Kernel {
@@ -154,12 +157,12 @@ uint32_t osKernelGetTickFreq(void) {
 }
 
 osThreadId_t osThreadNew(osThreadFunc_t func,
-                         void *argument,
-                         const osThreadAttr_t *attr) {
+                         void* argument,
+                         const osThreadAttr_t* attr) {
     return std::shared_ptr<std::thread>(new std::thread(func, argument));
 }
 
-const char *osThreadGetName(osThreadId_t thread_id) {
+const char* osThreadGetName(osThreadId_t thread_id) {
     std::stringstream buffer;
     buffer << thread_id->get_id();
     return buffer.str().c_str();
@@ -171,7 +174,7 @@ osStatus_t osThreadJoin(osThreadId_t thread_id) {
 }
 
 osStatus_t osDelay(uint32_t milliseconds) {
-    std::this_thread::sleep_for(std::chrono::microseconds(milliseconds));
+    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     return osOK;
 }
 
@@ -179,9 +182,9 @@ static uint32_t message_size = 0;
 
 osMessageQueueId_t osMessageQueueNew(uint32_t msg_count,
                                      uint32_t msg_size,
-                                     const osMessageQueueAttr_t *attr) {
+                                     const osMessageQueueAttr_t* attr) {
     message_size = msg_size;
-    return osMessageQueueId_t(new vinci::ConcurrentQueueCpp<uint8_t *>());
+    return osMessageQueueId_t(new vinci::ConcurrentQueueCpp<uint8_t*>());
 }
 
 uint32_t osMessageQueueGetMsgSize(osMessageQueueId_t mq_id) {
@@ -189,24 +192,54 @@ uint32_t osMessageQueueGetMsgSize(osMessageQueueId_t mq_id) {
 }
 
 osStatus_t osMessageQueuePut(osMessageQueueId_t mq_id,
-                             const void *msg_ptr,
+                             const void* msg_ptr,
                              uint8_t msg_prio,
                              uint32_t timeout) {
-    uint8_t *data = new uint8_t[message_size];
+    uint8_t* data = new uint8_t[message_size];
     memcpy(data, msg_ptr, message_size);
     mq_id.get()->push(data);
     return osOK;
 }
 
+/**
+ * The function osMessageQueueGet retrieves a message from the message queue specified by the parameter mq_id and saves it to the buffer pointed to by the parameter msg_ptr.
+ * The message priority is stored to parameter msg_prio if not token{NULL}.
+ * @param mq_id message queue ID obtained by osMessageQueueNew.
+ * @param msg_ptr pointer to buffer for message to get from a queue.
+ * @param msg_prio pointer to buffer for message priority or NULL.
+ * @param timeout The parameter timeout can have the following values:
+        - when timeout is 0, the function returns instantly (i.e. try semantics).
+        - when timeout is set to osWaitForever the function will wait for an infinite time until the message is retrieved (i.e. wait semantics).
+        - all other values specify a time in kernel ticks for a timeout (i.e. timed-wait semantics).
+ * @return Possible osStatus_t return values:
+        - osOK: the message has been retrieved from the queue.
+        - osErrorTimeout: the message could not be retrieved from the queue in the given time (timed-wait semantics).
+        - osErrorResource: nothing to get from the queue (try semantics).
+        - osErrorParameter: parameter mq_id is NULL or invalid, non-zero timeout specified in an ISR.
+ */
 osStatus_t osMessageQueueGet(osMessageQueueId_t mq_id,
-                             void *msg_ptr,
-                             uint8_t *msg_prio,
+                             void* msg_ptr,
+                             uint8_t* msg_prio,
                              uint32_t timeout) {
-    uint8_t *data = (uint8_t *) mq_id.get()->pop();
-    memcpy(msg_ptr, data, message_size);
-    delete[] data;
-    msg_prio = nullptr;
-    return osOK;
+    uint8_t* data;
+    if (timeout == osWaitForever) {
+        data = (uint8_t*) mq_id.get()->pop();
+        memcpy(msg_ptr, data, message_size);
+        delete[] data;
+        msg_prio = nullptr;
+        return osOK;
+    } else {
+        std::optional<uint8_t*> msg = mq_id.get()->pop(timeout);
+        if (msg.has_value()) {
+            data = msg.value();
+            memcpy(msg_ptr, data, message_size);
+            delete[] data;
+            msg_prio = nullptr;
+            return osOK;
+        } else {
+            return (timeout == 0) ? osErrorResource : osErrorTimeout;
+        }
+    }
 }
 
 osStatus_t osMessageQueueReset(osMessageQueueId_t mq_id) {
@@ -218,7 +251,7 @@ uint32_t osMessageQueueGetCount(osMessageQueueId_t mq_id) {
     return mq_id.get()->count();
 }
 
-osMutexId_t osMutexNew(const osMutexAttr_t *attr) {
+osMutexId_t osMutexNew(const osMutexAttr_t* attr) {
     return std::shared_ptr<std::mutex>();
 }
 

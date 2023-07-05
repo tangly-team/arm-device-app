@@ -13,39 +13,41 @@ namespace sal {
     template<typename T>
     class Led : public ActorCmsis<T> {
     public:
-        Led(char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis <T>& pool);
+        Led(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool);
 
         void start(uint32_t rateInTicks);
 
         void stop();
 
-        virtual bool processMsg(Message <T>* msg);
+        virtual bool processMsg(Message<T>* msg);
 
+    protected:
+        virtual void toggle();
+
+        bool isOn() { return _on; };
     private:
-        void toggle();
-
         bool _on = false;
     };
 
     template<typename T>
-    Led<T>::Led(char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis <T>& pool) : ActorCmsis<T>(name, queueSize, attributes) {}
+    Led<T>::Led(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool) : ActorCmsis<T>(name, queueSize, attributes, pool) {}
 
     template<typename T>
     void Led<T>::start(uint32_t rateInTicks) {
         LedCmd cmd{START, rateInTicks};
-        Messages* msg = build(cmd, this->pool());
+        Messages* msg = MessageBuilder::build(cmd, this->pool());
         this->receive(msg);
     }
 
     template<typename T>
     void Led<T>::stop() {
         LedCmd cmd{STOP, 0};
-        Messages* msg = build(cmd, this->pool());
+        Messages* msg = MessageBuilder::build(cmd, this->pool());
         this->receive(msg);
     }
 
     template<typename T>
-    bool Led<T>::processMsg(Message <T>* msg) {
+    bool Led<T>::processMsg(Message<T>* msg) {
         if (msg == nullptr) {
             toggle();
         } else {
@@ -60,12 +62,15 @@ namespace sal {
                         break;
                 }
             }
+            this->pool().release(msg);
         }
+        return true;
     }
 
     template<typename T>
     void Led<T>::toggle() {
         _on = !_on;
+        hardware.setLed(this->name(), this->isOn());
     }
 }
 #endif
