@@ -23,6 +23,8 @@ if (DOXYGEN_FOUND)
     doxygen_add_docs(docs
             ${CMAKE_SOURCE_DIR}
             COMMENT "Generate Doxygen Documentation")
+else (DOXYGEN_FOUND)
+    message("Doxygen need to be installed on your workstation to generate the doxygen documentation")
 endif (DOXYGEN_FOUND)
 
 include_directories(src/vinci-cmsis-simulation/inc)
