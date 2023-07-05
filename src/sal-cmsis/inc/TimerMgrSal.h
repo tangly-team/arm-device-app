@@ -13,7 +13,7 @@ namespace sal {
     public:
         static const int ACTOR_TIMER_MGR_MSG_TYPE = 1;
 
-        TimerMgrSal(char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<Data>& pool);
+        TimerMgrSal(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<Data>& pool);
 
         virtual void createTimer(Timer<Data>& timer);
 
@@ -26,7 +26,7 @@ namespace sal {
     protected:
         virtual bool processMsg(Message<Data>* msg);
     };
-    TimerMgrSal::TimerMgrSal(char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<Data>& pool) : ActorCmsis<Data>(name, queueSize, attributes, pool) {}
+    TimerMgrSal::TimerMgrSal(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<Data>& pool) : ActorCmsis<Data>(name, queueSize, attributes, pool) {}
 
     void TimerMgrSal::createTimer(Timer<Data>& timer) {
         TimerCmd<Data> cmd{CREATE, timer};

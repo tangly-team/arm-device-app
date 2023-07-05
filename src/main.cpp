@@ -8,6 +8,7 @@
 #include "sal-cmsis/inc/Messages.h"
 #include "sal-cmsis/inc/Led.h"
 #include "sal-cmsis/inc/PressureSensor.h"
+#include "sal-cmsis/inc/TimerMgrSal.h"
 #include "vinci-cmsis-simulation/inc/Simulator.h"
 
 
@@ -83,6 +84,9 @@ int main(int argc, char** argv) {
 
     // Connects higher order processes to inputs and outputs
     ProcessorOne processorOne("processorOne", 10, attributes, pool, ledGreen, ledRed, pressureSensorOne);
+
+    // Timer manager for the application
+    TimerMgrSal timerMgr("timerMgr", 10, attributes, pool);
 
     // Initial setup of the components
     ledGreen.start(100);
