@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.25)
 project(vinci
-        VERSION 0.0.1
+        VERSION 0.0.2
         DESCRIPTION "vinci platform C++ library")
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED 23)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED 20)
 
 option(BUILD_RELEASE "Build with static code checker and doxygen documentation" OFF)
 
