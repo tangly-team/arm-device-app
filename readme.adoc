@@ -15,15 +15,24 @@ The _vinci-tests_ folder contains examples of unit tests grouped in suites.
 
 The _CMakeLists.txt_ file contains examples how to compile the project, execute the unit tests, and generate the doxygen documentation.
 
+== Folder Structure
+
+vinci:: contains abstractions for the realtime functions and classes
+vinci-cpp:: implementation based on the C++ library
+vinci-cmsis:: implementation based on the CMSIS library
+vinci-cmsis-simulation:: implementation of the CMSIS library as a simulation in C++
+
+A major goal is to avoid dynamic memory allocation and the usage of the heap.
+Programmers are free to use a heap, but the library does not require one.
+
 == CMake
 
-The following commands process the cmake configuration.
 The script compiles the tests and the demonstration application.
 
 [code, bash]
 ----
-mkdir cmake-build           <1>
-cd cmake-build              <2>
+mkdir build                 <1>
+cd build                    <2>
 cmake ..                    <3>
 make                        <4>
 ./VinciTest                 <5>
@@ -32,7 +41,7 @@ make                        <4>
 
 <1> Create the build directory for the project
 <2> Change into the build directory
-<3> Generate all build local build files with cmake
+<3> Generate all local build files with cmake
 <4> Build all artifacts
 <5> Run the unit tests
 <6> Run the demonstration application

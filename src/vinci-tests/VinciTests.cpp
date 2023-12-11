@@ -1,9 +1,7 @@
 #include "../vinci/inc/Message.h"
-#include "../vinci/inc/TimerMgr.h"
 #include "../vinci-cpp/inc/MsgPoolCpp.h"
 #include "../vinci-cmsis/inc/MsgPoolCmsis.h"
 #include "../sal-cmsis/inc/Messages.h"
-#include "../sal-cmsis/inc/TimerMgrSal.h"
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 

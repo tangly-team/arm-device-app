@@ -6,6 +6,8 @@ project(vinci
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED 20)
 
+set(CMAKE_CXX_CPPLINT "cpplint")
+
 option(BUILD_RELEASE "Build with static code checker and doxygen documentation" OFF)
 
 if (BUILD_RELEASE)
@@ -31,14 +33,15 @@ include_directories(src/vinci-cmsis-simulation/inc)
 
 add_executable(Vinci
         src/main.cpp
-        src/vinci/inc/Actor.h src/vinci/inc/ConcurrentQueue.h src/vinci/inc/TimerMgr.h
+        src/vinci/inc/Actor.h src/vinci/inc/ConcurrentQueue.h
         src/vinci/inc/Message.h src/vinci/inc/MessagePool.h
         src/vinci-cpp/inc/ActorCpp.h src/vinci-cpp/inc/ConcurrentQueueCpp.h src/vinci-cpp/inc/MsgPoolCpp.h
         src/vinci-cmsis/inc/ActorCmsis.h src/vinci-cmsis/inc/ConcurrentQueueCmsis.h src/vinci-cmsis/inc/MsgPoolCmsis.h
-        src/sal-cmsis/inc/Messages.h src/sal-cmsis/inc/TimerMgrSal.h
-        src/sal-cmsis/inc/ValveOnOff.h src/sal-cmsis/inc/PressureSensor.h src/sal-cmsis/inc/Led.h
+        src/sal-cmsis/inc/Messages.h
+        src/sal-cmsis/inc/Valve.h src/sal-cmsis/inc/GPIO.h src/sal-cmsis/inc/PWM.h
+        src/sal-cmsis/inc/PressureSensor.h src/sal-cmsis/inc/BlinkingLed.h src/sal-cmsis/inc/Motor.h
         src/vinci-cmsis-simulation/inc/cmsis_os2.h src/vinci-cmsis-simulation/inc/Simulator.h
-        )
+)
 
 add_executable(VinciTest
         src/doctest/doctest.h

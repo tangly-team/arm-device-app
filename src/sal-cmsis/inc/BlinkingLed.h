@@ -11,9 +11,9 @@ using namespace vinci;
 
 namespace sal {
     template<typename T>
-    class Led : public ActorCmsis<T> {
+    class BlinkingLed : public ActorCmsis<T> {
     public:
-        Led(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool);
+        BlinkingLed(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool);
 
         void start(uint32_t rateInTicks);
 
@@ -30,24 +30,24 @@ namespace sal {
     };
 
     template<typename T>
-    Led<T>::Led(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool) : ActorCmsis<T>(name, queueSize, attributes, pool) {}
+    BlinkingLed<T>::BlinkingLed(const char* name, int queueSize, osThreadAttr_t& attributes, MsgPoolCmsis<T>& pool) : ActorCmsis<T>(name, queueSize, attributes, pool) {}
 
     template<typename T>
-    void Led<T>::start(uint32_t rateInTicks) {
+    void BlinkingLed<T>::start(uint32_t rateInTicks) {
         LedCmd cmd{START, rateInTicks};
         Messages* msg = MessageBuilder::build(cmd, this->pool());
         this->receive(msg);
     }
 
     template<typename T>
-    void Led<T>::stop() {
+    void BlinkingLed<T>::stop() {
         LedCmd cmd{STOP, 0};
         Messages* msg = MessageBuilder::build(cmd, this->pool());
         this->receive(msg);
     }
 
     template<typename T>
-    bool Led<T>::processMsg(Message<T>* msg) {
+    bool BlinkingLed<T>::processMsg(Message<T>* msg) {
         if (msg == nullptr) {
             toggle();
         } else {
@@ -68,7 +68,7 @@ namespace sal {
     }
 
     template<typename T>
-    void Led<T>::toggle() {
+    void BlinkingLed<T>::toggle() {
         _on = !_on;
         hardware.setLed(this->name(), this->isOn());
     }

@@ -2,8 +2,8 @@
 #define SAL_MESSAGES_H
 
 #include <variant>
+#include "../../vinci/inc/Actor.h"
 #include "../../vinci//inc/MessagePool.h"
-#include "../../vinci/inc/TimerMgr.h"
 
 using namespace vinci;
 
@@ -32,9 +32,7 @@ namespace sal {
         uint32_t pressure;
     };
 
-    typedef std::variant<LedCmd,
-            PressureSensorCmd, PressureSensorData,
-            TimerCmd<Data>, Timer<Data>> Variants;
+    typedef std::variant<LedCmd, PressureSensorCmd, PressureSensorData> Variants;
 
     struct Data {
         Variants variants;
@@ -50,14 +48,6 @@ namespace sal {
         PressureSensorData* pressureSensorData() {
             return std::get_if<PressureSensorData>(&variants);
         }
-
-        TimerCmd<Data>* timerCmd() {
-            return std::get_if<TimerCmd<Data>>(&variants);
-        }
-
-        Timer<Data>* timer() {
-            return std::get_if<Timer<Data>>(&variants);
-        };
     };
 
     class MessageBuilder {
@@ -74,16 +64,6 @@ namespace sal {
 
         static Message<Data>* build(PressureSensorData& sensorData, MessagePool<Data>& pool) {
             Data data = {sensorData};
-            return build(data, pool);
-        }
-
-        static Message<Data>* build(TimerCmd<Data>& cmd, MessagePool<Data>& pool) {
-            Data data = {cmd};
-            return build(data, pool);
-        }
-
-        static Message<Data>* build(Timer<Data>& timer, MessagePool<Data>& pool) {
-            Data data = {timer};
             return build(data, pool);
         }
 

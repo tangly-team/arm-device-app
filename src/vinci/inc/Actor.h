@@ -16,7 +16,7 @@ namespace vinci {
     class Actor {
     public:
         /**
-         * Maximum length of an actor name.
+         * Maximum length of an actor name. To avoid heap usage, static sized char strings are used.
          */
         static const int ACTOR_NAME_SIZE = 32;
 
@@ -44,6 +44,7 @@ namespace vinci {
         /**
          * Constructor of the class.
          * @param name name of the actor. The name should be human-readable and a unique identifier of the active object.
+         * @param pool pool providing message instances.
          */
         Actor(const char* name, MessagePool<T>& pool) : _pool{pool} {
             strncpy(_name, name, ACTOR_NAME_SIZE);

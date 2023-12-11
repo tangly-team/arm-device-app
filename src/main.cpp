@@ -4,11 +4,9 @@
 
 #include "vinci-cmsis/inc/ActorCmsis.h"
 #include "vinci-cmsis/inc/MsgPoolCmsis.h"
-#include "vinci/inc/TimerMgr.h"
 #include "sal-cmsis/inc/Messages.h"
-#include "sal-cmsis/inc/Led.h"
+#include "sal-cmsis/inc/BlinkingLed.h"
 #include "sal-cmsis/inc/PressureSensor.h"
-#include "sal-cmsis/inc/TimerMgrSal.h"
 #include "vinci-cmsis-simulation/inc/Simulator.h"
 
 
@@ -19,25 +17,25 @@ MsgPoolCmsis<Data> pool;
 
 /**
  * The processor one regulates two leds based on the input of a pressure sensor
- * - If the pressure sensor is between 0 and  50, Led Green is stopped and Led Red blinks every 1000 ticks
- * - If the pressure sensor is between 50 and 100, Led Green blinks every 1000 ticks and Red Led is stopped
- * - If the pressure sensor is above 100, Led Green blinks every 4000 ticks and Read Lead blinks every 2000 ticks
+ * - If the pressure sensor is between 0 and  50, BlinkingLed Green is stopped and BlinkingLed Red blinks every 1000 ticks
+ * - If the pressure sensor is between 50 and 100, BlinkingLed Green blinks every 1000 ticks and Red BlinkingLed is stopped
+ * - If the pressure sensor is above 100, BlinkingLed Green blinks every 4000 ticks and Read Lead blinks every 2000 ticks
  */
 class ProcessorOne : public ActorCmsis<Data> {
 public:
-    ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, Led<Data>& ledGreen, Led<Data>& ledRed,
+    ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, BlinkingLed<Data>& ledGreen, BlinkingLed<Data>& ledRed,
                  PressureSensor<Data>& pressureSensorOne);
 
 protected:
     bool processMsg(Message<Data>* msg);
 
 private:
-    Led<Data>& _ledGreen;
-    Led<Data>& _ledRed;
+    BlinkingLed<Data>& _ledGreen;
+    BlinkingLed<Data>& _ledRed;
     PressureSensor<Data>& _pressureSensorOne;
 };
 
-ProcessorOne::ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, Led<Data>& ledGreen, Led<Data>& ledRed,
+ProcessorOne::ProcessorOne(const char* name, int queueSize, osThreadAttr_t& threadAttributes, MsgPoolCmsis<Data>& pool, BlinkingLed<Data>& ledGreen, BlinkingLed<Data>& ledRed,
                            PressureSensor<Data>& pressureSensorOne)
         : ActorCmsis<Data>(name, queueSize, threadAttributes, pool), _ledGreen{ledGreen}, _ledRed{ledRed}, _pressureSensorOne{pressureSensorOne} {
     pressureSensorOne.registerListener(this);
@@ -79,14 +77,11 @@ int main(int argc, char** argv) {
     Simulator<Data> simulator{pool, pressureSensorOne};
 
     // Declares output components no requiring ISR routines
-    Led<Data> ledGreen(LED_GREEN, 10, attributes, pool);
-    Led<Data> ledRed(LED_RED, 10, attributes, pool);
+    BlinkingLed<Data> ledGreen(LED_GREEN, 10, attributes, pool);
+    BlinkingLed<Data> ledRed(LED_RED, 10, attributes, pool);
 
     // Connects higher order processes to inputs and outputs
     ProcessorOne processorOne("processorOne", 10, attributes, pool, ledGreen, ledRed, pressureSensorOne);
-
-    // Timer manager for the application
-    TimerMgrSal timerMgr("timerMgr", 10, attributes, pool);
 
     // Initial setup of the components
     ledGreen.start(100);
